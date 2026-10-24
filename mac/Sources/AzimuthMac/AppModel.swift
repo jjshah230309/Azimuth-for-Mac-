@@ -81,18 +81,27 @@ final class AppModel: ObservableObject {
     }
 
     private var sink: @Sendable (String) -> Void {
-        { [weak self] text in Task { @MainActor in self?.append(text) } }
+        { [weak self] text in Task { @MainActor [weak self] in self?.append(text) } }
     }
 
     /// Runs blocking work off the main thread, with the console showing its output.
-    private func perform(_ title: String, work: @escaping @Sendable (@Sendable (String) -> Void) throws -> Void) {
+    /// The work receives the console sink; it is `@escaping` because the library's output callbacks are.
+    private func perform(
+        _ title: String,
+        work: @escaping @Sendable (_ output: @escaping @Sendable (String) -> Void) throws -> Void
+    ) {
         guard !isBusy else { return }
         busyTitle = title
         console = ""
         let output = sink
         Task.detached {
-            var failure: String?
-            do { try work(output) } catch { failure = error.localizedDescription }
+            let failure: String?
+            do {
+                try work(output)
+                failure = nil
+            } catch {
+                failure = error.localizedDescription
+            }
             await MainActor.run {
                 self.busyTitle = nil
                 if let failure { self.errorMessage = "\(title) failed. \(failure)" }
@@ -253,7 +262,7 @@ final class AppModel: ObservableObject {
                 let session = GameSession(engine: engine, paths: paths, options: options)
                 session.onOutput = output
                 session.onExit = { [weak self] status in
-                    Task { @MainActor in self?.sessionEnded(status: status) }
+                    Task { @MainActor [weak self] in self?.sessionEnded(status: status) }
                 }
                 try session.start()
                 await MainActor.run {
