@@ -1,0 +1,31 @@
+name: macOS
+
+on:
+  push:
+    paths: ["mac/**", ".github/workflows/macos.yml"]
+  pull_request:
+    paths: ["mac/**", ".github/workflows/macos.yml"]
+
+jobs:
+  build:
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: mac
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test
+        run: swift test
+
+      - name: Build app bundle
+        run: scripts/build-app.sh
+
+      - name: Check bundle
+        run: |
+          app="build/Azimuth for Mac.app"
+          test -x "$app/Contents/MacOS/AzimuthMac"
+          test -f "$app/Contents/Resources/azimuth-windows.zip"
+          test -f "$app/Contents/Resources/AppIcon.icns"
+          plutil -lint "$app/Contents/Info.plist"
+          codesign --verify --deep --strict "$app"
